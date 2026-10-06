@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chapter 33 - The Mad Hunter</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=MedievalSharp&family=Outfit:wght@300;400;600;700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+            font-family: 'Outfit', sans-serif;
+            background-color: #0b090a;
+            color: #f8f9fa;
+        }
+
+        .font-cinzel { font-family: 'Cinzel', serif; }
+        .font-medieval { font-family: 'MedievalSharp', cursive; }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); }
+        ::-webkit-scrollbar-thumb { background: #b7094c; border-radius: 4px; }
+
+        /* UI Panels & Frames */
+        .rpg-panel {
+            background: linear-gradient(135deg, rgba(22, 14, 28, 0.92) 0%, rgba(10, 8, 16, 0.96) 100%);
+            border: 2px solid #b7094c;
+            box-shadow: 0 0 15px rgba(183, 9, 76, 0.3), inset 0 0 15px rgba(0, 0, 0, 0.8);
+            border-radius: 12px;
+            backdrop-filter: blur(8px);
+        }
+
+        .rpg-button {
+            background: linear-gradient(180deg, #89082f 0%, #5c0620 100%);
+            border: 1px solid #ff4d6d;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+            transition: all 0.2s ease;
+        }
+
+        .rpg-button:hover {
+            background: linear-gradient(180deg, #a4133c 0%, #72092c 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(255, 77, 109, 0.4);
+        }
+
+        .rpg-button:active {
+            transform: translateY(1px);
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 16px;
+            height: 16px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .damage-pop {
+            position: absolute;
+            font-family: 'Cinzel', serif;
+            font-weight: bold;
+            font-size: 20px;
+            color: #ff0055;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+            animation: floatUp 0.8s ease-out forwards;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            50% { transform: translateY(-25px) scale(1.3); }
+            100% { opacity: 0; transform: translateY(-45px) scale(0.8); }
+        }
+
+        #minimap-container {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: 3px solid #ff4d6d;
+            box-shadow: 0 0 10px rgba(0,0,0,0.8);
+            overflow: hidden;
+            position: relative;
+            background: #111;
+        }
+
+        /* Animated Glowing Effect */
+        .glow-pulse {
+            animation: pulseGlow 2s infinite alternate;
+        }
+
+        @keyframes pulseGlow {
+            from { box-shadow: 0 0 5px #b7094c, inset 0 0 5px #b7094c; }
+            to { box-shadow: 0 0 20px #ff4d6d, inset 0 0 10px #ff4d6d; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas -->
+    <canvas id="gameCanvas" class="w-full h-full absolute inset-0 z-0"></canvas>
+
+    <!-- Crosshair for FP/TP targeting -->
+    <div id="crosshair" class="z-10 flex items-center justify-center">
+        <div class="w-2 h-2 bg-red-500 rounded-full border border-white"></div>
+    </div>
+
+    <!-- HUD Overlay -->
+    <div id="hud" class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 sm:p-6">
+        
+        <!-- TOP BAR: Stats & Minimap -->
+        <div class="flex justify-between items-start">
+            <!-- Health / Hunger / EXP Bars -->
+            <div class="rpg-panel p-4 pointer-events-auto w-72 sm:w-80">
+                <div class="flex justify-between items-center mb-2">
+                    <span id="hud-name" class="font-cinzel text-lg font-bold text-pink-400">Buddy (Mad Hunter)</span>
+                    <span id="hud-level" class="font-medieval text-yellow-400 text-sm bg-black/60 px-2 py-0.5 rounded border border-yellow-500/30">Lvl 1</span>
+                </div>
+
+                <!-- Health Bar -->
+                <div class="mb-2">
+                    <div class="flex justify-between text-xs text-gray-300 mb-1">
+                        <span><i class="fa-solid fa-heart text-red-500 mr-1"></i> Health</span>
+                        <span id="hp-text">100 / 100</span>
+                    </div>
+                    <div class="w-full h-3 bg-gray-900 rounded-full overflow-hidden border border-red-900">
+                        <div id="hp-bar" class="h-full bg-gradient-to-r from-red-700 to-red-500 transition-all duration-300" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- Hunger / Madness Bar -->
+                <div class="mb-2">
+                    <div class="flex justify-between text-xs text-gray-300 mb-1">
+                        <span><i class="fa-solid fa-drumstick-bite text-amber-500 mr-1"></i> Mad Cravings</span>
+                        <span id="hunger-text">50 / 100</span>
+                    </div>
+                    <div class="w-full h-3 bg-gray-900 rounded-full overflow-hidden border border-amber-900">
+                        <div id="hunger-bar" class="h-full bg-gradient-to-r from-amber-700 to-yellow-500 transition-all duration-300" style="width: 50%;"></div>
+                    </div>
+                </div>
+
+                <!-- EXP Bar -->
+                <div>
+                    <div class="flex justify-between text-xs text-gray-300 mb-1">
+                        <span><i class="fa-solid fa-star text-purple-400 mr-1"></i> Experience</span>
+                        <span id="exp-text">0 / 100</span>
+                    </div>
+                    <div class="w-full h-2 bg-gray-900 rounded-full overflow-hidden border border-purple-900">
+                        <div id="exp-bar" class="h-full bg-gradient-to-r from-purple-700 to-pink-500 transition-all duration-300" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Minimap & Quick Actions -->
+            <div class="flex flex-col items-end gap-3 pointer-events-auto">
+                <div id="minimap-container">
+                    <canvas id="minimapCanvas" width="160" height="160"></canvas>
+                </div>
+                <div class="text-xs text-gray-300 bg-black/60 px-3 py-1 rounded-full border border-gray-700">
+                    <i class="fa-solid fa-location-dot text-red-400 mr-1"></i> <span id="location-name">Bachelor's Outskirts</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- QUEST TRACKER (MID-RIGHT) -->
+        <div class="absolute right-6 top-52 rpg-panel p-4 w-64 pointer-events-auto hidden sm:block">
+            <h3 class="font-cinzel text-amber-400 text-sm font-bold border-b border-amber-500/30 pb-1 mb-2 flex items-center justify-between">
+                <span><i class="fa-solid fa-scroll mr-2"></i>Active Quest</span>
+                <span class="text-xs text-gray-400 font-normal" id="quest-chapter">Chapter 33</span>
+            </h3>
+            <div id="quest-title" class="font-bold text-sm text-pink-300 mb-1">The Infinite Cravings</div>
+            <div id="quest-desc" class="text-xs text-gray-300 mb-2 leading-relaxed">Hunt down 5 Mad Vegetables & Fruits in the town outskirts.</div>
+            <div class="w-full bg-gray-900 h-2 rounded-full overflow-hidden border border-gray-700">
+                <div id="quest-progress-bar" class="bg-green-500 h-full transition-all duration-300" style="width: 0%;"></div>
+            </div>
+            <div id="quest-progress-text" class="text-right text-[10px] text-gray-400 mt-1">0 / 5 Completed</div>
+        </div>
+
+        <!-- BOTTOM BAR: Ammo, Controls & Menu Buttons -->
+        <div class="flex justify-between items-end">
+            <!-- Weapon & Ammo Status -->
+            <div class="rpg-panel p-3 pointer-events-auto flex items-center gap-4">
+                <div class="w-12 h-12 bg-black/50 rounded-lg border border-pink-500/40 flex items-center justify-center text-pink-400 text-2xl">
+                    <i id="weapon-icon" class="fa-solid fa-gun"></i>
+                </div>
+                <div>
+                    <div id="weapon-name" class="font-cinzel font-bold text-sm text-yellow-300">Mad Shotgun</div>
+                    <div class="text-xs text-gray-300 flex items-center gap-1 mt-0.5">
+                        <span>Ammo:</span>
+                        <span id="ammo-count" class="font-bold text-white text-sm">6 / 6</span>
+                        <span id="reload-indicator" class="text-amber-400 text-[10px] ml-2 hidden">RELOADING...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Menu Buttons for Overlay Panels -->
+            <div class="flex gap-2 pointer-events-auto">
+                <button onclick="togglePanel('storyModal')" class="rpg-button px-3 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 text-pink-200">
+                    <i class="fa-solid fa-book-open text-amber-400"></i> <span class="hidden sm:inline">Story & Lore</span>
+                </button>
+                <button onclick="togglePanel('inventoryModal')" class="rpg-button px-3 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 text-pink-200">
+                    <i class="fa-solid fa-briefcase text-amber-400"></i> <span class="hidden sm:inline">Inventory (I)</span>
+                </button>
+                <button onclick="togglePanel('skillModal')" class="rpg-button px-3 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 text-pink-200">
+                    <i class="fa-solid fa-tree text-amber-400"></i> <span class="hidden sm:inline">Skills (K)</span>
+                </button>
+                <button onclick="togglePanel('statsModal')" class="rpg-button px-3 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 text-pink-200">
+                    <i class="fa-solid fa-user text-amber-400"></i> <span class="hidden sm:inline">Stats (C)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- STORY & LORE MODAL -->
+    <div id="storyModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden backdrop-blur-md">
+        <div class="rpg-panel max-w-2xl w-full max-h-[85vh] flex flex-col p-6 glow-pulse">
+            <div class="flex justify-between items-center border-b border-pink-500/30 pb-3 mb-4">
+                <h2 class="font-cinzel text-2xl font-bold text-amber-400 flex items-center gap-2">
+                    <i class="fa-solid fa-book-journal-whills"></i> Chapter 33: Bedtime Stories
+                </h2>
+                <button onclick="togglePanel('storyModal')" class="text-gray-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="overflow-y-auto pr-2 space-y-4 text-sm leading-relaxed text-gray-200 font-serif">
+                <div class="text-center font-medieval text-xl text-pink-400 tracking-wide">"The Mad Hunter"</div>
+                <div class="text-xs text-center text-gray-400 italic">March 25, 2020 — From the creations inspired by Alice in Wonderland Mad Hatters & "The Rages Band"</div>
+                
+                <p class="first-letter:text-3xl first-letter:font-bold first-letter:text-amber-400">
+                    Once upon a time, there was a boastful man who knew no limits in eating food. His name was Buddy, but his gluttony slowly reduced him to impoverishment. He desired to consume unlimited quantities of food, yet his hunger was always accompanied by intense rage. He turned mad because nothing was ever left for him after eating—fruits, meats, and vegetables vanished in his endless cravings.
+                </p>
+
+                <p>
+                    Driven by madness, he decided to chase outside the town of Bachelor’s House. In his mindless wanderings, he stumbled upon a gun. Thus began the tale of <strong class="text-pink-400">"The Mad Hunter"</strong>. Strange and forbidden thoughts took hold of his brain. Though God's commandment clearly warned <em>"You shall not kill"</em>, Buddy began a pure killing spree—slaughtering and shooting fruits, vegetables, and meats to satisfy his addiction.
+                </p>
+
+                <p>
+                    One year passed long ago. One day, while consumed by his madness and taking shots at wild roaming food creatures, Buddy fired a shot without looking. He didn't notice that the bullet struck a young walking boy named <strong class="text-yellow-400">Alito</strong>.
+                </p>
+
+                <p>
+                    Wounded and bleeding, Alito collapsed. Buddy apologized to himself, realizing the horrifying consequences of his strange thoughts and food addiction. Unable to meet Alito's eyes in fear of being a murderer, Buddy fled into the wilderness before the Police Chief could take him to the precinct jail.
+                </p>
+
+                <div class="bg-amber-950/40 border border-amber-500/40 p-4 rounded-lg mt-4">
+                    <h4 class="font-cinzel font-bold text-amber-400 text-base mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-scale-balanced"></i> Moral Lesson
+                    </h4>
+                    <p class="text-xs text-amber-200 italic leading-normal">
+                        "Don't overcome pressure to eat. Be contented to eat in other days. Or else the punishment by God is punished by you too, for you shall not kill. Be contented with what you eat rather than consuming pure strange desires. You need conscience first before you eat or do anything."
+                    </p>
+                </div>
+            </div>
+            <div class="mt-6 text-right border-t border-pink-500/30 pt-3">
+                <button onclick="togglePanel('storyModal')" class="rpg-button px-6 py-2 rounded-lg font-bold text-sm">Return to Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- INVENTORY & EQUIPMENT MODAL -->
+    <div id="inventoryModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden backdrop-blur-md">
+        <div class="rpg-panel max-w-3xl w-full p-6 flex flex-col md:flex-row gap-6">
+            <!-- Equipment & Stats Column -->
+            <div class="w-full md:w-1/3 flex flex-col items-center border-b md:border-b-0 md:border-r border-pink-500/30 pr-0 md:pr-6 pb-4 md:pb-0">
+                <h3 class="font-cinzel text-lg font-bold text-amber-400 mb-4">Equipment</h3>
+                <div class="space-y-3 w-full">
+                    <!-- Weapon Slot -->
+                    <div class="bg-black/50 border border-pink-500/40 p-3 rounded-lg flex items-center gap-3">
+                        <div class="w-10 h-10 bg-pink-950/60 rounded flex items-center justify-center text-pink-400 text-lg border border-pink-600/50">
+                            <i class="fa-solid fa-gun"></i>
+                        </div>
+                        <div class="text-xs">
+                            <div class="text-gray-400">Weapon</div>
+                            <div class="font-bold text-white">Mad Hunter Shotgun</div>
+                            <div class="text-[10px] text-green-400">+15 Attack Damage</div>
+                        </div>
+                    </div>
+
+                    <!-- Armor Slot -->
+                    <div class="bg-black/50 border border-pink-500/40 p-3 rounded-lg flex items-center gap-3">
+                        <div class="w-10 h-10 bg-pink-950/60 rounded flex items-center justify-center text-amber-400 text-lg border border-pink-600/50">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <div class="text-xs">
+                            <div class="text-gray-400">Armor</div>
+                            <div class="font-bold text-white">Bachelor's Coat</div>
+                            <div class="text-[10px] text-blue-400">+10 Defense</div>
+                        </div>
+                    </div>
+
+                    <!-- Relic Slot -->
+                    <div class="bg-black/50 border border-pink-500/40 p-3 rounded-lg flex items-center gap-3">
+                        <div class="w-10 h-10 bg-pink-950/60 rounded flex items-center justify-center text-purple-400 text-lg border border-pink-600/50">
+                            <i class="fa-solid fa-apple-whole"></i>
+                        </div>
+                        <div class="text-xs">
+                            <div class="text-gray-400">Food Charm</div>
+                            <div class="font-bold text-white">Glutton's Relic</div>
+                            <div class="text-[10px] text-purple-300">+20% Food Restore</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bag Grid Column -->
+            <div class="w-full md:w-2/3 flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-cinzel text-lg font-bold text-amber-400">Pouch Items</h3>
+                        <span class="text-xs text-gray-400" id="inv-capacity">Capacity: 6 / 12</span>
+                    </div>
+                    <div id="inventory-grid" class="grid grid-cols-4 gap-3">
+                        <!-- Dynamic Inventory Slots -->
+                    </div>
+                </div>
+                <div class="flex justify-between items-center border-t border-pink-500/30 pt-4 mt-4">
+                    <p class="text-xs text-gray-400 italic">Click consumables to use & restore health/craving.</p>
+                    <button onclick="togglePanel('inventoryModal')" class="rpg-button px-5 py-2 rounded-lg font-bold text-sm">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATS & CLASS MODAL -->
+    <div id="statsModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden backdrop-blur-md">
+        <div class="rpg-panel max-w-md w-full p-6">
+            <div class="flex justify-between items-center border-b border-pink-500/30 pb-3 mb-4">
+                <h2 class="font-cinzel text-xl font-bold text-amber-400"><i class="fa-solid fa-user-gear mr-2"></i>Character Attributes</h2>
+                <button onclick="togglePanel('statsModal')" class="text-gray-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-4 mb-6">
+                <!-- Class Selector -->
+                <div class="bg-black/40 p-3 rounded-lg border border-pink-500/30">
+                    <label class="text-xs text-gray-400 block mb-1">Combat Class</label>
+                    <select id="class-select" onchange="changeClass(this.value)" class="w-full bg-gray-900 text-yellow-300 font-bold border border-pink-500/50 rounded p-2 text-sm focus:outline-none">
+                        <option value="Hunter">Gluttonous Hunter (Balanced)</option>
+                        <option value="Berserker">Mad Berserker (High Melee Damage)</option>
+                        <option value="Gunslinger">Desperate Gunslinger (Fast Attack Speed)</option>
+                    </select>
+                </div>
+
+                <div class="flex justify-between items-center text-sm bg-black/30 p-2 rounded">
+                    <span class="text-gray-300">Available Stat Points:</span>
+                    <span id="stat-points" class="font-bold text-yellow-400 text-base">0</span>
+                </div>
+
+                <!-- Stats List -->
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="text-sm font-bold text-pink-300">Strength (Attack Power)</div>
+                            <div class="text-[10px] text-gray-400">Increases weapon damage</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="stat-str" class="font-bold text-white text-sm">10</span>
+                            <button onclick="addStat('str')" class="w-6 h-6 rpg-button rounded flex items-center justify-center text-xs text-yellow-300 font-bold">+</button>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="text-sm font-bold text-amber-300">Gluttony (Health & Appetite)</div>
+                            <div class="text-[10px] text-gray-400">Increases maximum HP & Craving limit</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="stat-glut" class="font-bold text-white text-sm">10</span>
+                            <button onclick="addStat('glut')" class="w-6 h-6 rpg-button rounded flex items-center justify-center text-xs text-yellow-300 font-bold">+</button>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="text-sm font-bold text-cyan-300">Agility (Speed & Reload)</div>
+                            <div class="text-[10px] text-gray-400">Increases movement & reload speed</div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="stat-agi" class="font-bold text-white text-sm">10</span>
+                            <button onclick="addStat('agi')" class="w-6 h-6 rpg-button rounded flex items-center justify-center text-xs text-yellow-300 font-bold">+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-right border-t border-pink-500/30 pt-3">
+                <button onclick="togglePanel('statsModal')" class="rpg-button px-5 py-2 rounded-lg font-bold text-sm">Save & Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SKILL TREE MODAL -->
+    <div id="skillModal" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 hidden backdrop-blur-md">
+        <div class="rpg-panel max-w-2xl w-full p-6">
+            <div class="flex justify-between items-center border-b border-pink-500/30 pb-3 mb-4">
+                <h2 class="font-cinzel text-xl font-bold text-amber-400"><i class="fa-solid fa-sitemap mr-2"></i>Skill Tree & Abilities</h2>
+                <button onclick="togglePanel('skillModal')" class="text-gray-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <!-- Skill 1 -->
+                <div class="bg-black/50 border border-pink-500/40 p-4 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="text-pink-400 text-2xl mb-2"><i class="fa-solid fa-bolt"></i></div>
+                        <h4 class="font-bold text-sm text-yellow-300 mb-1">Mad Sprint</h4>
+                        <p class="text-xs text-gray-300 leading-relaxed">Temporary 50% movement speed boost driven by insane hunger.</p>
+                    </div>
+                    <button id="skill-btn-1" onclick="unlockSkill(1)" class="mt-4 rpg-button py-1.5 rounded text-xs font-bold text-yellow-300">Unlock (Lvl 2)</button>
+                </div>
+
+                <!-- Skill 2 -->
+                <div class="bg-black/50 border border-pink-500/40 p-4 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="text-pink-400 text-2xl mb-2"><i class="fa-solid fa-burst"></i></div>
+                        <h4 class="font-bold text-sm text-yellow-300 mb-1">Multi-Shot Feast</h4>
+                        <p class="text-xs text-gray-300 leading-relaxed">Fires a wide spread shot destroying clusters of food enemies.</p>
+                    </div>
+                    <button id="skill-btn-2" onclick="unlockSkill(2)" class="mt-4 rpg-button py-1.5 rounded text-xs font-bold text-yellow-300">Unlock (Lvl 3)</button>
+                </div>
+
+                <!-- Skill 3 -->
+                <div class="bg-black/50 border border-pink-500/40 p-4 rounded-lg flex flex-col justify-between">
+                    <div>
+                        <div class="text-pink-400 text-2xl mb-2"><i class="fa-solid fa-shield-heart"></i></div>
+                        <h4 class="font-bold text-sm text-yellow-300 mb-1">Moral Shield</h4>
+                        <p class="text-xs text-gray-300 leading-relaxed">Conscience awakens to absorb 40% incoming damage for 10s.</p>
+                    </div>
+                    <button id="skill-btn-3" onclick="unlockSkill(3)" class="mt-4 rpg-button py-1.5 rounded text-xs font-bold text-yellow-300">Unlock (Lvl 5)</button>
+                </div>
+            </div>
+
+            <div class="text-right border-t border-pink-500/30 pt-3">
+                <button onclick="togglePanel('skillModal')" class="rpg-button px-5 py-2 rounded-lg font-bold text-sm">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NPC DIALOGUE OVERLAY -->
+    <div id="dialogueBox" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-2xl rpg-panel p-5 hidden glow-pulse">
+        <div class="flex items-start gap-4">
+            <div class="w-14 h-14 bg-amber-950 rounded-full border-2 border-amber-400 flex items-center justify-center text-2xl text-amber-300 shrink-0">
+                <i id="npc-portrait-icon" class="fa-solid fa-user"></i>
+            </div>
+            <div class="flex-1">
+                <h4 id="npc-name" class="font-cinzel font-bold text-amber-400 text-lg mb-1">Alito</h4>
+                <p id="npc-text" class="text-sm text-gray-200 leading-relaxed mb-4">"Please don't shoot! I'm just a boy walking home..."</p>
+                <div id="npc-actions" class="flex justify-end gap-2">
+                    <button onclick="advanceDialogue()" class="rpg-button px-4 py-1.5 text-xs font-bold rounded">Continue...</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const gameState = {
+            player: {
+                level: 1,
+                hp: 100,
+                maxHp: 100,
+                hunger: 50,
+                maxHunger: 100,
+                exp: 0,
+                maxExp: 100,
+                class: 'Hunter',
+                stats: { str: 10, glut: 10, agi: 10, points: 0 },
+                ammo: 6,
+                maxAmmo: 6,
+                isReloading: false,
+                skills: [false, false, false],
+                inventory: [
+                    { name: 'Mad Apple', type: 'food', hp: 20, hunger: 15, icon: 'fa-apple-whole', count: 3 },
+                    { name: 'Angry Steak', type: 'food', hp: 40, hunger: 30, icon: 'fa-drumstick-bite', count: 1 }
+                ]
+            },
+            quest: {
+                currentStep: 1,
+                targetsKilled: 0,
+                targetGoal: 5,
+                title: "The Infinite Cravings",
+                desc: "Hunt down 5 Mad Vegetables & Fruits in the town outskirts."
+            },
+            cameraFP: false,
+            pointerLocked: false
+        };
+
+        // THREE.JS Engine Variables
+        let scene, camera, renderer;
+        let playerMesh, gunMesh;
+        let terrain, skyMesh;
+        let clock = new THREE.Clock();
+        let keys = {};
+        let mouseX = 0, mouseY = 0;
+        let enemies = [];
+        let npcs = [];
+        let bullets = [];
+        let particles = [];
+        let audioCtx;
+
+        // Sound Effects Synthesizer using Web Audio API
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'shoot') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(10, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'hit') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'quest') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(880, now + 0.1);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
+        function init3D() {
+            const canvas = document.getElementById('gameCanvas');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0c0814);
+            scene.fog = new THREE.FogExp2(0x0c0814, 0.015);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0x6b5b95, 0.8);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffb703, 1.2);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // Ground / Terrain
+            const terrainGeo = new THREE.PlaneGeometry(300, 300, 64, 64);
+            terrainGeo.rotateX(-Math.PI / 2);
+            
+            // Generate minor height variations
+            const pos = terrainGeo.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                const x = pos.getX(i);
+                const z = pos.getZ(i);
+                pos.setY(i, Math.sin(x * 0.05) * Math.cos(z * 0.05) * 2);
+            }
+            terrainGeo.computeVertexNormals();
+
+            const terrainMat = new THREE.MeshStandardMaterial({
+                color: 0x1b263b,
+                roughness: 0.8,
+                metalness: 0.1
+            });
+            terrain = new THREE.Mesh(terrainGeo, terrainMat);
+            terrain.receiveShadow = true;
+            scene.add(terrain);
+
+            // Create Player Mesh
+            createPlayer();
+
+            // Create Bachelor's Town Outskirts Environment (Houses, Trees, Fence)
+            createEnvironment();
+
+            // Spawn Initial NPCs & Food Monsters
+            spawnNPCs();
+            spawnEnemies();
+
+            // Setup Controls & Events
+            setupControls();
+
+            // Render Loop
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        function createPlayer() {
+            const group = new THREE.Group();
+
+            // Player Body
+            const bodyGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.8, 12);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x89082f });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.9;
+            body.castShadow = true;
+            group.add(body);
+
+            // Player Head
+            const headGeo = new THREE.SphereGeometry(0.35, 12, 12);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xffddd2 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.0;
+            group.add(head);
+
+            // Gun Mesh attached to right side
+            const gunGeo = new THREE.BoxGeometry(0.15, 0.2, 0.8);
+            const gunMat = new THREE.MeshStandardMaterial({ color: 0x212529 });
+            gunMesh = new THREE.Mesh(gunGeo, gunMat);
+            gunMesh.position.set(0.4, 1.2, 0.4);
+            group.add(gunMesh);
+
+            playerMesh = group;
+            playerMesh.position.set(0, 0, 0);
+            scene.add(playerMesh);
+        }
+
+        function createEnvironment() {
+            // Bachelor's House / Buildings
+            for (let i = 0; i < 4; i++) {
+                const house = new THREE.Group();
+                const wallGeo = new THREE.BoxGeometry(8, 6, 8);
+                const wallMat = new THREE.MeshStandardMaterial({ color: 0x3d2645 });
+                const walls = new THREE.Mesh(wallGeo, wallMat);
+                walls.position.y = 3;
+                house.add(walls);
+
+                const roofGeo = new THREE.ConeGeometry(6, 4, 4);
+                const roofMat = new THREE.MeshStandardMaterial({ color: 0x8338ec });
+                const roof = new THREE.Mesh(roofGeo, roofMat);
+                roof.position.y = 8;
+                roof.rotation.y = Math.PI / 4;
+                house.add(roof);
+
+                const angle = (i / 4) * Math.PI * 2;
+                house.position.set(Math.cos(angle) * 45, 0, Math.sin(angle) * 45);
+                scene.add(house);
+            }
+
+            // Strange Wonderland Trees
+            for (let i = 0; i < 40; i++) {
+                const tree = new THREE.Group();
+                const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 4);
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3b32 });
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.y = 2;
+                tree.add(trunk);
+
+                const leavesGeo = new THREE.DodecahedronGeometry(2);
+                const leavesMat = new THREE.MeshStandardMaterial({ color: (i % 2 === 0) ? 0x00f5d4 : 0x7b2cbf, roughness: 0.3 });
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                leaves.position.y = 4.5;
+                tree.add(leaves);
+
+                const rx = (Math.random() - 0.5) * 220;
+                const rz = (Math.random() - 0.5) * 220;
+                if (Math.hypot(rx, rz) > 15) {
+                    tree.position.set(rx, 0, rz);
+                    scene.add(tree);
+                }
+            }
+        }
+
+        function spawnNPCs() {
+            // NPC: Alito (The walking young boy)
+            const alito = createNpcMesh(0xffb703, "Alito");
+            alito.position.set(15, 0, 10);
+            alito.userData = { name: "Alito", type: "alito", dialogue: "Please don't shot me! I'm just a boy walking around Bachelor's House..." };
+            npcs.push(alito);
+            scene.add(alito);
+
+            // NPC: Police Chief
+            const chief = createNpcMesh(0x3a86ff, "Police Chief");
+            chief.position.set(-20, 0, -20);
+            chief.userData = { name: "Police Chief", type: "chief", dialogue: "Buddy! You've gone too far with your gluttonous shooting spree! Stop right there!" };
+            npcs.push(chief);
+            scene.add(chief);
+        }
+
+        function createNpcMesh(color, label) {
+            const group = new THREE.Group();
+            const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: color });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.8;
+            group.add(body);
+
+            const headGeo = new THREE.SphereGeometry(0.3, 8, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xffddd2 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.8;
+            group.add(head);
+
+            return group;
+        }
+
+        function spawnEnemies() {
+            // Clear existing
+            enemies.forEach(e => scene.remove(e.mesh));
+            enemies = [];
+
+            const types = [
+                { name: 'Mad Apple', color: 0xff0055, size: 0.8, hp: 30, speed: 0.05 },
+                { name: 'Angry Broccoli', color: 0x38b000, size: 1.0, hp: 45, speed: 0.04 },
+                { name: 'Carnivorous Ribs', color: 0xd90429, size: 1.2, hp: 80, speed: 0.03 }
+            ];
+
+            for (let i = 0; i < 10; i++) {
+                const type = types[Math.floor(Math.random() * types.length)];
+                const mesh = new THREE.Group();
+
+                let geo = new THREE.SphereGeometry(type.size, 12, 12);
+                let mat = new THREE.MeshStandardMaterial({ color: type.color });
+                let body = new THREE.Mesh(geo, mat);
+                body.position.y = type.size;
+                mesh.add(body);
+
+                const rx = (Math.random() - 0.5) * 180;
+                const rz = (Math.random() - 0.5) * 180;
+                mesh.position.set(rx, 0, rz);
+
+                scene.add(mesh);
+
+                enemies.push({
+                    mesh: mesh,
+                    hp: type.hp,
+                    maxHp: type.hp,
+                    speed: type.speed,
+                    name: type.name
+                });
+            }
+        }
+
+        function setupControls() {
+            window.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+
+                if (e.key.toLowerCase() === 'v') {
+                    gameState.cameraFP = !gameState.cameraFP;
+                }
+                if (e.key.toLowerCase() === 'r') {
+                    reloadWeapon();
+                }
+                if (e.key.toLowerCase() === 'i') togglePanel('inventoryModal');
+                if (e.key.toLowerCase() === 'k') togglePanel('skillModal');
+                if (e.key.toLowerCase() === 'c') togglePanel('statsModal');
+            });
+
+            window.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+
+            window.addEventListener('mousedown', (e) => {
+                initAudio();
+                if (e.button === 0) { // Left Click Shoot
+                    shootWeapon();
+                }
+            });
+
+            // Pointer Lock for Aiming
+            const canvas = document.getElementById('gameCanvas');
+            canvas.addEventListener('click', () => {
+                canvas.requestPointerLock();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement === canvas) {
+                    playerMesh.rotation.y -= e.movementX * 0.003;
+                }
+            });
+        }
+
+        function shootWeapon() {
+            if (gameState.player.isReloading) return;
+            if (gameState.player.ammo <= 0) {
+                reloadWeapon();
+                return;
+            }
+
+            gameState.player.ammo--;
+            updateHUD();
+            playSound('shoot');
+
+            // Bullet Spawn
+            const bulletGeo = new THREE.SphereGeometry(0.15, 8, 8);
+            const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffbe0b });
+            const bullet = new THREE.Mesh(bulletGeo, bulletMat);
+
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(playerMesh.quaternion);
+            bullet.position.copy(playerMesh.position).add(new THREE.Vector3(0, 1.2, 0));
+
+            scene.add(bullet);
+            bullets.push({ mesh: bullet, dir: dir, life: 60 });
+
+            // Muzzle Flash Effect
+            const flash = new THREE.PointLight(0xffbe0b, 3, 5);
+            flash.position.copy(bullet.position);
+            scene.add(flash);
+            setTimeout(() => scene.remove(flash), 50);
+        }
+
+        function reloadWeapon() {
+            if (gameState.player.isReloading || gameState.player.ammo === gameState.player.maxAmmo) return;
+            gameState.player.isReloading = true;
+            document.getElementById('reload-indicator').classList.remove('hidden');
+
+            const reloadTime = 1500 / (1 + gameState.player.stats.agi * 0.02);
+            setTimeout(() => {
+                gameState.player.ammo = gameState.player.maxAmmo;
+                gameState.player.isReloading = false;
+                document.getElementById('reload-indicator').classList.add('hidden');
+                updateHUD();
+            }, reloadTime);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+
+            // Player Movement Logic
+            let speed = 8 * delta * (1 + gameState.player.stats.agi * 0.01);
+            if (keys['shift']) speed *= 1.5;
+
+            const moveDir = new THREE.Vector3();
+            if (keys['w']) moveDir.z -= 1;
+            if (keys['s']) moveDir.z += 1;
+            if (keys['a']) moveDir.x -= 1;
+            if (keys['d']) moveDir.x += 1;
+
+            moveDir.normalize();
+            moveDir.applyQuaternion(playerMesh.quaternion);
+            playerMesh.position.addScaledVector(moveDir, speed);
+
+            // Camera Tracking
+            if (gameState.cameraFP) {
+                camera.position.copy(playerMesh.position).add(new THREE.Vector3(0, 1.8, 0));
+                camera.rotation.copy(playerMesh.rotation);
+            } else {
+                const camOffset = new THREE.Vector3(0, 4, 8).applyQuaternion(playerMesh.quaternion);
+                camera.position.copy(playerMesh.position).add(camOffset);
+                camera.lookAt(playerMesh.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+            }
+
+            // Update Bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.mesh.position.addScaledVector(b.dir, 40 * delta);
+                b.life--;
+
+                // Enemy Hit Detection
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    if (b.mesh.position.distanceTo(enemy.mesh.position) < 1.5) {
+                        const dmg = Math.floor(20 + gameState.player.stats.str * 1.5);
+                        enemy.hp -= dmg;
+                        playSound('hit');
+                        showDamagePop(enemy.mesh.position, dmg);
+
+                        // Bullet Destroy
+                        scene.remove(b.mesh);
+                        bullets.splice(i, 1);
+
+                        if (enemy.hp <= 0) {
+                            scene.remove(enemy.mesh);
+                            enemies.splice(j, 1);
+                            onEnemyKilled();
+                        }
+                        break;
+                    }
+                }
+
+                if (b && b.life <= 0) {
+                    scene.remove(b.mesh);
+                    bullets.splice(i, 1);
+                }
+            }
+
+            // NPC Proximity Check for Dialogue
+            npcs.forEach(npc => {
+                if (playerMesh.position.distanceTo(npc.position) < 3.5) {
+                    triggerDialogue(npc.userData);
+                }
+            });
+
+            // Enemy AI Chasing Player
+            enemies.forEach(enemy => {
+                const dist = enemy.mesh.position.distanceTo(playerMesh.position);
+                if (dist < 20 && dist > 1.2) {
+                    const dir = playerMesh.position.clone().sub(enemy.mesh.position).normalize();
+                    enemy.mesh.position.addScaledVector(dir, enemy.speed);
+                } else if (dist <= 1.2) {
+                    // Attack player
+                    gameState.player.hp = Math.max(0, gameState.player.hp - 0.2);
+                    updateHUD();
+                }
+            });
+
+            // Update Minimap
+            drawMinimap();
+
+            renderer.render(scene, camera);
+        }
+
+        function onEnemyKilled() {
+            gameState.player.exp += 25;
+            if (gameState.player.exp >= gameState.player.maxExp) {
+                levelUp();
+            }
+
+            if (gameState.quest.currentStep === 1) {
+                gameState.quest.targetsKilled++;
+                if (gameState.quest.targetsKilled >= gameState.quest.targetGoal) {
+                    advanceQuest();
+                }
+            }
+            updateHUD();
+        }
+
+        function levelUp() {
+            gameState.player.level++;
+            gameState.player.exp = 0;
+            gameState.player.maxExp += 50;
+            gameState.player.maxHp += 20;
+            gameState.player.hp = gameState.player.maxHp;
+            gameState.player.stats.points += 2;
+            playSound('quest');
+            showDamagePop(playerMesh.position, "LEVEL UP!", "#f1c40f");
+        }
+
+        function advanceQuest() {
+            playSound('quest');
+            if (gameState.quest.currentStep === 1) {
+                gameState.quest.currentStep = 2;
+                gameState.quest.title = "The Meat Madness";
+                gameState.quest.desc = "Defeat 3 Giant Steak Monsters near Bachelor's House.";
+                gameState.quest.targetsKilled = 0;
+                gameState.quest.targetGoal = 3;
+            } else if (gameState.quest.currentStep === 2) {
+                gameState.quest.currentStep = 3;
+                gameState.quest.title = "The Tragic Shot";
+                gameState.quest.desc = "Approach Alito to witness the tragic accident.";
+                gameState.quest.targetsKilled = 0;
+                gameState.quest.targetGoal = 1;
+            }
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-level').innerText = `Lvl ${gameState.player.level}`;
+            document.getElementById('hp-text').innerText = `${Math.floor(gameState.player.hp)} / ${gameState.player.maxHp}`;
+            document.getElementById('hp-bar').style.width = `${(gameState.player.hp / gameState.player.maxHp) * 100}%`;
+
+            document.getElementById('hunger-text').innerText = `${Math.floor(gameState.player.hunger)} / ${gameState.player.maxHunger}`;
+            document.getElementById('hunger-bar').style.width = `${(gameState.player.hunger / gameState.player.maxHunger) * 100}%`;
+
+            document.getElementById('exp-text').innerText = `${gameState.player.exp} / ${gameState.player.maxExp}`;
+            document.getElementById('exp-bar').style.width = `${(gameState.player.exp / gameState.player.maxExp) * 100}%`;
+
+            document.getElementById('ammo-count').innerText = `${gameState.player.ammo} / ${gameState.player.maxAmmo}`;
+
+            document.getElementById('quest-title').innerText = gameState.quest.title;
+            document.getElementById('quest-desc').innerText = gameState.quest.desc;
+            const progress = Math.min(100, (gameState.quest.targetsKilled / gameState.quest.targetGoal) * 100);
+            document.getElementById('quest-progress-bar').style.width = `${progress}%`;
+            document.getElementById('quest-progress-text').innerText = `${gameState.quest.targetsKilled} / ${gameState.quest.targetGoal} Completed`;
+
+            document.getElementById('stat-points').innerText = gameState.player.stats.points;
+            document.getElementById('stat-str').innerText = gameState.player.stats.str;
+            document.getElementById('stat-glut').innerText = gameState.player.stats.glut;
+            document.getElementById('stat-agi').innerText = gameState.player.stats.agi;
+
+            renderInventoryGrid();
+        }
+
+        function drawMinimap() {
+            const canvas = document.getElementById('minimapCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, 160, 160);
+
+            // Center is Player
+            ctx.fillStyle = '#00f5d4';
+            ctx.beginPath();
+            ctx.arc(80, 80, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Enemies
+            ctx.fillStyle = '#ff0055';
+            enemies.forEach(enemy => {
+                const dx = (enemy.mesh.position.x - playerMesh.position.x) * 0.8;
+                const dz = (enemy.mesh.position.z - playerMesh.position.z) * 0.8;
+                if (Math.hypot(dx, dz) < 70) {
+                    ctx.beginPath();
+                    ctx.arc(80 + dx, 80 + dz, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Draw NPCs
+            ctx.fillStyle = '#ffb703';
+            npcs.forEach(npc => {
+                const dx = (npc.position.x - playerMesh.position.x) * 0.8;
+                const dz = (npc.position.z - playerMesh.position.z) * 0.8;
+                if (Math.hypot(dx, dz) < 70) {
+                    ctx.beginPath();
+                    ctx.arc(80 + dx, 80 + dz, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        function showDamagePop(pos3D, text, color = "#ff0055") {
+            const el = document.createElement('div');
+            el.className = 'damage-pop';
+            el.innerText = text;
+            el.style.color = color;
+
+            const screenPos = pos3D.clone().project(camera);
+            const x = (screenPos.x * .5 + .5) * window.innerWidth;
+            const y = (-(screenPos.y * .5) + .5) * window.innerHeight;
+
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 800);
+        }
+
+        let activeDialogueNpc = null;
+        function triggerDialogue(npcData) {
+            if (activeDialogueNpc === npcData.type) return;
+            activeDialogueNpc = npcData.type;
+
+            document.getElementById('npc-name').innerText = npcData.name;
+            document.getElementById('npc-text').innerText = npcData.dialogue;
+            document.getElementById('dialogueBox').classList.remove('hidden');
+
+            if (npcData.type === 'alito' && gameState.quest.currentStep === 3) {
+                gameState.quest.currentStep = 4;
+                gameState.quest.title = "Escape the Chief";
+                gameState.quest.desc = "Buddy accidentally wounded Alito! Flee from the Police Chief!";
+                updateHUD();
+            }
+        }
+
+        function advanceDialogue() {
+            document.getElementById('dialogueBox').classList.add('hidden');
+            setTimeout(() => { activeDialogueNpc = null; }, 2000);
+        }
+
+        function togglePanel(id) {
+            const panel = document.getElementById(id);
+            panel.classList.toggle('hidden');
+        }
+
+        function renderInventoryGrid() {
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = '';
+
+            gameState.player.inventory.forEach((item, index) => {
+                const slot = document.createElement('div');
+                slot.className = 'bg-black/60 border border-pink-500/40 p-3 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-pink-400 transition';
+                slot.innerHTML = `
+                    <i class="fa-solid ${item.icon} text-amber-400 text-2xl mb-1"></i>
+                    <div class="text-[11px] font-bold text-white text-center">${item.name}</div>
+                    <div class="text-[9px] text-gray-400">x${item.count}</div>
+                `;
+                slot.onclick = () => useItem(index);
+                grid.appendChild(slot);
+            });
+        }
+
+        function useItem(index) {
+            const item = gameState.player.inventory[index];
+            if (!item) return;
+
+            gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + item.hp);
+            gameState.player.hunger = Math.min(gameState.player.maxHunger, gameState.player.hunger + item.hunger);
+            item.count--;
+
+            if (item.count <= 0) {
+                gameState.player.inventory.splice(index, 1);
+            }
+            updateHUD();
+        }
+
+        function addStat(stat) {
+            if (gameState.player.stats.points > 0) {
+                gameState.player.stats[stat]++;
+                gameState.player.stats.points--;
+                updateHUD();
+            }
+        }
+
+        function changeClass(newClass) {
+            gameState.player.class = newClass;
+            if (newClass === 'Berserker') {
+                gameState.player.stats.str += 5;
+            } else if (newClass === 'Gunslinger') {
+                gameState.player.stats.agi += 5;
+            }
+            updateHUD();
+        }
+
+        function unlockSkill(skillId) {
+            if (gameState.player.level >= skillId + 1) {
+                gameState.player.skills[skillId - 1] = true;
+                const btn = document.getElementById(`skill-btn-${skillId}`);
+                btn.innerText = "UNLOCKED";
+                btn.className = "mt-4 bg-green-800 py-1.5 rounded text-xs font-bold text-white cursor-default";
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Initialize on load
+        window.onload = () => {
+            init3D();
+            updateHUD();
+        };
+    </script>
+</body>
+</html>
